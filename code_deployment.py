@@ -235,7 +235,7 @@ class FullCircleDeployment:
             
     def setup_data_pipeline(self):
         """Generate demo data and setup data pipeline"""
-        self.print_step(5, "Setting up Data Pipeline", "Generating demo data for AI training")
+        self.print_step(5, "Setting up Data Pipeline", "Installing dependencies and generating demo data")
         
         # Create data directory
         data_dir = self.current_dir / "data"
@@ -244,12 +244,72 @@ class FullCircleDeployment:
         # Generate demo data if not exists
         analytics_file = data_dir / "analytics_data.csv"
         if not analytics_file.exists():
+            print("   Installing required Python dependencies...")
+            
+            # Try different approaches to install dependencies
+            install_success = False
+            
+            # Method 1: Regular pip install
+            success, _, _ = self.run_command(f"{sys.executable} -m pip install pandas numpy matplotlib plotly scikit-learn --quiet")
+            if success:
+                install_success = True
+                self.print_success("Dependencies installed via pip")
+            
+            # Method 2: User install
+            if not install_success:
+                success, _, _ = self.run_command(f"{sys.executable} -m pip install --user pandas numpy matplotlib plotly scikit-learn --quiet")
+                if success:
+                    install_success = True
+                    self.print_success("Dependencies installed via pip --user")
+            
+            # Method 3: Break system packages (for externally-managed environments)
+            if not install_success:
+                success, _, _ = self.run_command(f"{sys.executable} -m pip install --break-system-packages pandas numpy matplotlib plotly scikit-learn --quiet")
+                if success:
+                    install_success = True
+                    self.print_success("Dependencies installed via pip --break-system-packages")
+            
+            # Method 4: Create virtual environment
+            if not install_success:
+                print("   Creating virtual environment for dependencies...")
+                venv_path = self.current_dir / "venv"
+                self.run_command(f"{sys.executable} -m venv {venv_path}")
+                
+                # Determine activation script based on OS
+                if self.is_mac or self.is_linux:
+                    activate_script = venv_path / "bin" / "activate"
+                    pip_path = venv_path / "bin" / "pip"
+                    python_path = venv_path / "bin" / "python"
+                else:
+                    activate_script = venv_path / "Scripts" / "activate"
+                    pip_path = venv_path / "Scripts" / "pip.exe"
+                    python_path = venv_path / "Scripts" / "python.exe"
+                
+                # Install in virtual environment
+                success, _, _ = self.run_command(f"{pip_path} install pandas numpy matplotlib plotly scikit-learn --quiet")
+                if success:
+                    install_success = True
+                    self.print_success("Dependencies installed in virtual environment")
+                    # Update Python executable to use venv
+                    self.venv_python = str(python_path)
+                else:
+                    self.venv_python = sys.executable
+            else:
+                self.venv_python = sys.executable
+            
+            if not install_success:
+                self.print_warning("Could not install all dependencies. Data generation may fail.")
+                self.venv_python = sys.executable
+            
             print("   Generating synthetic transaction data (10k records)...")
-            success, stdout, stderr = self.run_command(f"{sys.executable} data_simulator.py")
+            success, stdout, stderr = self.run_command(f"{getattr(self, 'venv_python', sys.executable)} data_simulator.py")
             if not success:
                 self.print_error(f"Failed to generate demo data: {stderr}")
-                sys.exit(1)
-            self.print_success("Transaction data generated successfully")
+                self.print_info("The application will still work, but without demo data initially.")
+                # Create empty data file so containers don't fail
+                (data_dir / "analytics_data.csv").touch()
+            else:
+                self.print_success("Transaction data generated successfully")
         else:
             self.print_success("Transaction data already exists")
             
