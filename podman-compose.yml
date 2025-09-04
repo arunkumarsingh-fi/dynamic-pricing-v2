@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  ml-backend-v2:
+    build: ./ml_model
+    container_name: full-circle-ml-v2
+    ports:
+      - "5003:5002"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=5002
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    
+  ui-frontend-v2:
+    build: ./ui_app
+    container_name: full-circle-ui-v2
+    ports:
+      - "8503:8503"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - STREAMLIT_SERVER_PORT=8503
+      - ML_API_URL=http://ml-backend-v2:5002
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - ml-backend-v2
+    restart: unless-stopped
